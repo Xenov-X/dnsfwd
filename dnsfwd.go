@@ -127,6 +127,11 @@ func checkQuery(w dns.ResponseWriter, r *dns.Msg, transport string) {
 	}
 	c.Net = upstreamtransport
 	c.UDPSize = 0xffff
+	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1", nil, proxy.Direct) //"tcp", "127.0.0.1", nil, nil) may also work
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "can't connect to the proxy:", err)
+	}
+	c.Dialer = dialer
 	r2, _, err := c.Exchange(r, upstream)
 	if err != nil {
 		if verbose {
