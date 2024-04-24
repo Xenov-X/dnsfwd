@@ -146,6 +146,7 @@ func checkQuery(w dns.ResponseWriter, r *dns.Msg, transport string) {
 		socks_conn.Conn = conn
 		socks_conn.UDPSize = c.UDPSize
 		r2, _, err_c = c.ExchangeWithConn(m, socks_conn)
+		r2.Id = r.Id
 	} else {
 		r2, _, err_c = c.Exchange(r, upstream)
 	}
@@ -160,5 +161,6 @@ func checkQuery(w dns.ResponseWriter, r *dns.Msg, transport string) {
 	if fullquery {
 		log.Printf("[%s] Response:\n%s", transport, r2)
 	}
+
 	w.WriteMsg(r2)
 }
