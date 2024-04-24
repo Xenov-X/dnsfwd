@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"golang.org/x/net/proxy"
 )
 
 var version string
@@ -20,6 +21,7 @@ var upstream string
 
 var domainsplits []string
 var verbose bool
+var socks_on bool
 var versionflag bool
 var localbind string
 var transport string
@@ -40,6 +42,7 @@ func main() {
 	flag.IntVar(&timeout, "timeout", 2, "default timeout value for read/write/dial")
 	flag.BoolVar(&logfile, "o", false, "Log output to file (there will probably be a lot of junk here if verbose, and full queries are turned on)")
 	flag.BoolVar(&verbose, "v", false, "enable verbose")
+	flag.BoolVar(&socks_on, "s", false, "enable socks (127.0.0.1:1080) - forces TCP upstream")
 	flag.BoolVar(&fullquery, "full", false, "log full dns queries and responses")
 	flag.BoolVar(&versionflag, "version", false, "show version and exit")
 	flag.Parse()
@@ -127,18 +130,33 @@ func checkQuery(w dns.ResponseWriter, r *dns.Msg, transport string) {
 	}
 	c.Net = upstreamtransport
 	c.UDPSize = 0xffff
-	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1", nil, proxy.Direct) //"tcp", "127.0.0.1", nil, nil) may also work
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "can't connect to the proxy:", err)
+	var r2 *dns.Msg
+	var err_c error
+	if socks_on {
+		dialer, err := proxy.SOCKS5("tcp", "127.0.0.1:1080", nil, proxy.Direct) //"tcp", "127.0.0.1", nil, nil) may also work
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "can't connect to the proxy:", err)
+		}
+		conn, err := dialer.Dial("tcp", upstream)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "can't dial to upstream:", err)
+		}
+		defer conn.Close()
+		socks_conn := new(dns.Conn)
+		socks_conn.Conn = conn
+		socks_conn.UDPSize = c.UDPSize
+		r2, _, err_c = c.ExchangeWithConn(m, socks_conn)
+	} else {
+		r2, _, err_c = c.Exchange(r, upstream)
 	}
-	c.Dialer = dialer
-	r2, _, err := c.Exchange(r, upstream)
-	if err != nil {
+
+	if err_c != nil {
 		if verbose {
-			log.Printf("[%s] Error communicating to upstream: %s", transport, err)
+			log.Printf("[%s] Error communicating to upstream: %s", transport, err_c)
 		}
 		return
 	}
+
 	if fullquery {
 		log.Printf("[%s] Response:\n%s", transport, r2)
 	}
